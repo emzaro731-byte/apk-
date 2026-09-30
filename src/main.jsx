@@ -34,7 +34,6 @@ function App(){
  const [aiBusy,setAiBusy]=useState(false);
  const [requirements,setRequirements]=useState([]);
  const apiUrl=window.location.origin;
- const apiUrl=(rawApiUrl?(rawApiUrl.startsWith('http')?rawApiUrl:'https://'+rawApiUrl).replace(/\/$/,''):window.location.origin);
  useEffect(()=>localStorage.setItem('projects',JSON.stringify(projects)),[projects]);
  useEffect(()=>localStorage.setItem('active',active),[active]);
  useEffect(()=>localStorage.setItem('files',JSON.stringify(files)),[files]);
