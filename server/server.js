@@ -114,6 +114,34 @@ app.get("/api/build/:id", async (req, res) => {
   }
 });
 
+app.get("/api/build/:id/artifact", async (req, res) => {
+  if (!BUILD_RUNNER_URL || !BUILD_RUNNER_SECRET) {
+    return res.status(503).json({ error: "Flutter build runner is not configured." });
+  }
+  try {
+    const r = await fetch(`${BUILD_RUNNER_URL}/builds/${encodeURIComponent(req.params.id)}/artifact`, {
+      headers: { Authorization: `Bearer ${BUILD_RUNNER_SECRET}` }
+    });
+    if (!r.ok) {
+      let message = "Artifact download failed";
+      try { const data = await r.json(); message = data?.error || message; } catch {}
+      return res.status(r.status).json({ error: message });
+    }
+    const type = r.headers.get("content-type") || "application/octet-stream";
+    const disposition = r.headers.get("content-disposition");
+    res.status(r.status);
+    res.setHeader("Content-Type", type);
+    if (disposition) res.setHeader("Content-Disposition", disposition);
+    if (r.body) {
+      for await (const chunk of r.body) res.write(chunk);
+      return res.end();
+    }
+    return res.status(502).json({ error: "Runner returned an empty artifact" });
+  } catch (e) {
+    res.status(502).json({ error: e.message || "Unable to download artifact" });
+  }
+});
+
 const distDir = path.join(rootDir, "dist");
 app.use(express.static(distDir));
 
