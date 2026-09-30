@@ -9,3 +9,15 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-20b
+
+  - type: web
+    name: ai-flutter-builder
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_AI_API_URL
+        fromService:
+          type: web
+          name: ai-flutter-builder-api
+          property: host
