@@ -18,7 +18,7 @@ When adding packages, include/update pubspec.yaml. Never claim the app compiled.
 Do not include markdown fences. Prefer a small complete starter project unless the user asks for more.
 `;
 
-app.get("/health",(req,res)=>res.json({ok:true,groqConfigured:Boolean(GROQ_API_KEY),model:MODEL}));
+app.get("/",(req,res)=>res.type("html").send("<h1>AI Flutter Builder API</h1><p>API is running.</p><p>Use <code>/health</code> to check the service.</p>"));\napp.get("/health",(req,res)=>res.json({ok:true,groqConfigured:Boolean(GROQ_API_KEY),model:MODEL}));
 
 app.post("/api/generate",async(req,res)=>{
   if(!GROQ_API_KEY) return res.status(503).json({error:"GROQ_API_KEY is not configured on the server."});
