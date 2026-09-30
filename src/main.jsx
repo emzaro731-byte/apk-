@@ -71,13 +71,9 @@ async function generate(d,historyOverride){
    }else{
     const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
     setFiles(next);setRequirements([]);
-    const autoBuild=/\b(start|build|create|make|generate)\b/i.test(prompt);
     setChat(c=>[...c,{r:'AI',t:data.message||'I created the app preview. Review it before building the APK.'}]);
     setProjects(x=>x.map(v=>v.id===active?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
     setTab('builder');
-    if(autoBuild){
-     setTimeout(()=>build('apk',project,{...next}),0);
-    }
    }
    return data;
   }catch(e){
@@ -92,7 +88,11 @@ async function generate(d,historyOverride){
   setProjects(x=>[p,...x]);setActive(p.id);setTab('dashboard');
   const first=[{r:'You',t:d},{r:'AI',t:'I’ll ask a few questions before generating the app.'}];
   setChat(first);setPrompt('');
-  await generate(d,first);
+  const result=await generate(d,first);
+  if(result?.mode==='generated' && /\b(start|build|create|make|generate)\b/i.test(d)){
+   const next={...files};(result.files||[]).forEach(x=>{next[x.path]=x.content});
+   setTimeout(()=>build('apk',p,next),0);
+  }
  }
 
  async function build(format,projectOverride=project,filesOverride=files){
@@ -101,7 +101,7 @@ async function generate(d,historyOverride){
   const job={id:localId,projectId:projectOverride.id,projectName:projectOverride.name,format,status:'queued',message:'Build queued.',createdAt:new Date().toISOString()};
   setBuilds(x=>[job,...x]);setTab('builds');
   try{
-   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:project.name,files:Object.entries(files).map(([path,content])=>({path,content}))})});
+   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:projectOverride.name,files:Object.entries(filesOverride).map(([path,content])=>({path,content}))})});
    const data=await r.json();
    if(!r.ok)throw new Error(data.error||'Build request failed');
    setBuilds(x=>x.map(b=>b.id===localId?{...b,remoteId:data.id,status:data.status||'queued',message:'Build submitted to Flutter runner.'}:b));
@@ -121,7 +121,7 @@ async function generate(d,historyOverride){
   }
   setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:'Build status polling timed out.'}:b));
  }
- async function send(){const q=prompt.trim();if(!q||aiBusy)return;const next=[...chat,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}];setChat(next);setPrompt('');await generate(q,next);}
+ async function send(){const q=prompt.trim();if(!q||aiBusy)return;const next=[...chat,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}];setChat(next);setPrompt('');const result=await generate(q,next);if(result?.mode==='generated'&&project&&/\b(start|build|create|make|generate)\b/i.test(q)){const nextFiles={...files};(result.files||[]).forEach(x=>{nextFiles[x.path]=x.content});setTimeout(()=>build('apk',project,nextFiles),0);}}
 
  return <div className="app chatgpt-shell">
   <aside className="sidebar">
