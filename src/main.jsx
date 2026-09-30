@@ -33,7 +33,7 @@ function App(){
  const [chat,setChat]=useState([{r:'AI',t:'Tell me what app you want to build. I’ll ask a few questions first, then create a preview before you build the APK.'}]);
  const [aiBusy,setAiBusy]=useState(false);
  const [requirements,setRequirements]=useState([]);
- const rawApiUrl=import.meta.env.VITE_AI_API_URL||'';
+ const apiUrl=window.location.origin;
  const apiUrl=(rawApiUrl?(rawApiUrl.startsWith('http')?rawApiUrl:'https://'+rawApiUrl).replace(/\/$/,''):window.location.origin);
  useEffect(()=>localStorage.setItem('projects',JSON.stringify(projects)),[projects]);
  useEffect(()=>localStorage.setItem('active',active),[active]);
