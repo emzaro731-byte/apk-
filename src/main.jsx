@@ -51,16 +51,32 @@ function App(){
    if(!r.ok)throw new Error(data.error||'Groq request failed');
    const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
    setFiles(next);setChat(c=>[...c,{r:'AI',t:data.message||'Changes generated and applied.'}]);
-  }catch(e){setChat(c=>[...c,{r:'AI',t:e.message}]);}
+   return next;
+  }catch(e){setChat(c=>[...c,{r:'AI',t:e.message}]);return null;}
   finally{setAiBusy(false);}
  }
  async function createProject(){
   const d=prompt.trim()||'Build a modern Flutter application.';
   const p={id:crypto.randomUUID(),name:d.slice(0,36),description:d,status:'generating',updatedAt:new Date().toISOString()};
   setProjects(x=>[p,...x]);setActive(p.id);setTab('builder');setChat([{r:'You',t:d},{r:'AI',t:'Generating your Flutter project with Groq…'}]);
-  await generate(d);
+  const generatedFiles=await generate(d);
   setProjects(x=>x.map(v=>v.id===p.id?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
+  if(generatedFiles){
+   await startAutomaticBuild(p,generatedFiles,'apk');
+  }
   setPrompt('');
+ }
+ async function startAutomaticBuild(p,buildFiles,format='apk'){
+  const localId=crypto.randomUUID();
+  const job={id:localId,projectId:p.id,projectName:p.name,format,status:'queued',message:'Automatic build submitted after generation.',createdAt:new Date().toISOString(),automatic:true};
+  setBuilds(x=>[job,...x]);
+  try{
+   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:p.name,files:Object.entries(buildFiles).map(([path,content])=>({path,content}))})});
+   const data=await r.json();
+   if(!r.ok)throw new Error(data.error||'Automatic build request failed');
+   setBuilds(x=>x.map(b=>b.id===localId?{...b,remoteId:data.id,status:data.status||'queued',message:'Automatic build submitted to Flutter runner.'}:b));
+   if(data.id)pollBuild(localId,data.id);
+  }catch(e){setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:e.message}:b));}
  }
  async function build(format){
   if(!project||aiBusy)return;
