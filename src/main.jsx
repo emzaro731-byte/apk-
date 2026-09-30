@@ -101,7 +101,7 @@ async function generate(d,historyOverride){
   const job={id:localId,projectId:projectOverride.id,projectName:projectOverride.name,format,status:'queued',message:'Build queued.',createdAt:new Date().toISOString()};
   setBuilds(x=>[job,...x]);setTab('builds');
   try{
-   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:projectOverride.name,files:Object.entries(filesOverride).map(([path,content])=>({path,content}))})});
+   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:projectOverride.name,files:Object.entries(filesOverride||{}).map(([path,content])=>({path,content}))})});
    const data=await r.json();
    if(!r.ok)throw new Error(data.error||'Build request failed');
    setBuilds(x=>x.map(b=>b.id===localId?{...b,remoteId:data.id,status:data.status||'queued',message:'Build submitted to Flutter runner.'}:b));
