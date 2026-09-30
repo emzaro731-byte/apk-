@@ -21,3 +21,12 @@ services:
           type: web
           name: ai-flutter-builder-api
           property: host
+
+  - type: web
+    name: flutter-build-runner
+    runtime: docker
+    dockerfilePath: ./runner/Dockerfile
+    plan: starter
+    envVars:
+      - key: BUILD_RUNNER_SECRET
+        generateValue: true
