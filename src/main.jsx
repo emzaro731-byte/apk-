@@ -56,7 +56,7 @@ async function generate(d,historyOverride){
    const history=historyOverride||chat;
    let r;
    try{
-    r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,conversation:history.map(m=>({role:m.r==='You'?'user':'assistant',content:m.t})),files:Object.entries(files).map(([path,content])=>({path,content}))})});
+    r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,conversation:history.map(m=>({role:m.r==='You'?'user':'assistant',content:m.t})),files:Object.entries(filesOverride).map(([path,content])=>({path,content}))})});
    }catch(e){ throw Object.assign(new Error(explainError(e)),{network:true}); }
    let data={};
    try{
@@ -71,9 +71,13 @@ async function generate(d,historyOverride){
    }else{
     const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
     setFiles(next);setRequirements([]);
+    const autoBuild=/\b(start|build|create|make|generate)\b/i.test(prompt);
     setChat(c=>[...c,{r:'AI',t:data.message||'I created the app preview. Review it before building the APK.'}]);
     setProjects(x=>x.map(v=>v.id===active?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
     setTab('builder');
+    if(autoBuild){
+     setTimeout(()=>build('apk',project,{...next}),0);
+    }
    }
    return data;
   }catch(e){
@@ -91,10 +95,10 @@ async function generate(d,historyOverride){
   await generate(d,first);
  }
 
- async function build(format){
-  if(!project||aiBusy)return;
+ async function build(format,projectOverride=project,filesOverride=files){
+  if(!projectOverride||aiBusy)return;
   const localId=crypto.randomUUID();
-  const job={id:localId,projectId:project.id,projectName:project.name,format,status:'queued',message:'Build queued.',createdAt:new Date().toISOString()};
+  const job={id:localId,projectId:projectOverride.id,projectName:projectOverride.name,format,status:'queued',message:'Build queued.',createdAt:new Date().toISOString()};
   setBuilds(x=>[job,...x]);setTab('builds');
   try{
    const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:project.name,files:Object.entries(files).map(([path,content])=>({path,content}))})});
