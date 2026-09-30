@@ -33,50 +33,47 @@ function App(){
  const [files,setFiles]=useState(()=>JSON.parse(localStorage.getItem('files')||'null')||starter);
  const [builds,setBuilds]=useState(()=>JSON.parse(localStorage.getItem('builds')||'[]'));
  const [tab,setTab]=useState('dashboard'),[prompt,setPrompt]=useState(''),[file,setFile]=useState('lib/main.dart');
- const [chat,setChat]=useState([{r:'AI',t:'Describe the Flutter app you want to build. Groq will generate real project files through the secure backend.'}]);
+ const [chat,setChat]=useState([{r:'AI',t:'Tell me what app you want to build. I’ll ask a few questions first, then create a preview before you build the APK.'}]);
  const [aiBusy,setAiBusy]=useState(false);
+ const [requirements,setRequirements]=useState([]);
  const rawApiUrl=import.meta.env.VITE_AI_API_URL||'';
  const apiUrl=(rawApiUrl?(rawApiUrl.startsWith('http')?rawApiUrl:'https://'+rawApiUrl).replace(/\/$/,''):window.location.origin);
  useEffect(()=>localStorage.setItem('projects',JSON.stringify(projects)),[projects]);
  useEffect(()=>localStorage.setItem('active',active),[active]);
  useEffect(()=>localStorage.setItem('files',JSON.stringify(files)),[files]);
- useEffect(()=>localStorage.setItem('builds',JSON.stringify(builds)),[builds]);
- const project=projects.find(x=>x.id===active);
-
- async function generate(d){
+ useEffect(()=>localStorage.setItem('builds',JSON.stringify(builds)),[b async function generate(d,historyOverride){
   setAiBusy(true);
   try{
-   const r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,files:Object.entries(files).map(([path,content])=>({path,content}))})});
+   const history=historyOverride||chat;
+   const r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,conversation:history.map(m=>({role:m.r==='You'?'user':'assistant',content:m.t})),files:Object.entries(files).map(([path,content])=>({path,content}))})});
    const data=await r.json();
    if(!r.ok)throw new Error(data.error||'Groq request failed');
-   const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
-   setFiles(next);setChat(c=>[...c,{r:'AI',t:data.message||'Changes generated and applied.'}]);
-   return next;
+   if(data.mode==='questions'){
+    const qs=Array.isArray(data.questions)?data.questions:[];
+    setRequirements(qs);
+    setChat(c=>[...c,{r:'AI',t:data.message||'Before I build it, I need a few details.'},...qs.map(q=>({r:'AI',t:'Question: '+q}))]);
+   }else{
+    const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
+    setFiles(next);
+    setRequirements([]);
+    setChat(c=>[...c,{r:'AI',t:data.message||'I created the app preview. Review it before building the APK.'}]);
+    setTab('builder');
+   }
+   return data;
   }catch(e){setChat(c=>[...c,{r:'AI',t:e.message}]);return null;}
   finally{setAiBusy(false);}
  }
  async function createProject(){
   const d=prompt.trim()||'Build a modern Flutter application.';
-  const p={id:crypto.randomUUID(),name:d.slice(0,36),description:d,status:'generating',updatedAt:new Date().toISOString()};
-  setProjects(x=>[p,...x]);setActive(p.id);setTab('builder');setChat([{r:'You',t:d},{r:'AI',t:'Generating your Flutter project with Groq…'}]);
-  const generatedFiles=await generate(d);
-  setProjects(x=>x.map(v=>v.id===p.id?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
-  if(generatedFiles){
-   await startAutomaticBuild(p,generatedFiles,'apk');
-  }
+  const p={id:crypto.randomUUID(),name:d.slice(0,36),description:d,status:'designing',updatedAt:new Date().toISOString()};
+  setProjects(x=>[p,...x]);setActive(p.id);setTab('dashboard');
+  const first=[{r:'You',t:d},{r:'AI',t:'I’ll ask a few questions before generating the app.'}];
+  setChat(first);
+  await generate(d,first);
+  setProjects(x=>x.map(v=>v.id===p.id?{...v,status:'designing',updatedAt:new Date().toISOString()}:v));
   setPrompt('');
  }
- async function startAutomaticBuild(p,buildFiles,format='apk'){
-  const localId=crypto.randomUUID();
-  const job={id:localId,projectId:p.id,projectName:p.name,format,status:'queued',message:'Automatic build submitted after generation.',createdAt:new Date().toISOString(),automatic:true};
-  setBuilds(x=>[job,...x]);
-  try{
-   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:p.name,files:Object.entries(buildFiles).map(([path,content])=>({path,content}))})});
-   const data=await r.json();
-   if(!r.ok)throw new Error(data.error||'Automatic build request failed');
-   setBuilds(x=>x.map(b=>b.id===localId?{...b,remoteId:data.id,status:data.status||'queued',message:'Automatic build submitted to Flutter runner.'}:b));
-   if(data.id)pollBuild(localId,data.id);
-  }catch(e){setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:e.message}:b));}
+localId?{...b,status:'failed',message:e.message}:b));}
  }
  async function build(format){
   if(!project||aiBusy)return;
@@ -111,7 +108,7 @@ function App(){
   }
   setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:'Build status polling timed out.'}:b));
  }
- async function send(){const q=prompt.trim();if(!q||aiBusy)return;setChat(c=>[...c,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}]);setPrompt('');await generate(q);}
+ async function send(){const q=prompt.trim();if(!q||aiBusy)return;const next=[...chat,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}];setChat(next);setPrompt('');await generate(q,next);}
  return <div className="app chatgpt-shell">
   <aside className="sidebar">
    <div className="brand"><strong>✦ AI Flutter</strong><small>App Builder</small></div>
@@ -123,14 +120,14 @@ function App(){
   <main className="chat-main">
    <header><div><strong>AI Flutter Builder</strong><small>Build apps with AI</small></div><button className="model">Groq ▾</button></header>
    {tab==='dashboard'&&<section className="chat-home">
-    <div className="welcome"><div className="logo-mark">✦</div><h1>What can I build for you?</h1><p>Describe an app and I’ll generate the Flutter project, source files, and UI.</p></div>
+    <div className="welcome"><div className="logo-mark">✦</div><h1>What can I build for you?</h1><p>Describe your idea. I’ll ask questions, design it with you, show a preview, and only build the APK when you’re ready.</p></div>
     <div className="conversation">{chat.map((m,i)=><div className={m.r==='You'?'bubble user':'bubble ai'} key={i}><div className="avatar">{m.r==='You'?'Y':'✦'}</div><div><strong>{m.r==='You'?'You':'AI Flutter'}</strong><p>{m.t}</p></div></div>)}</div>
-    <div className="composer"><textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')createProject()}} placeholder="Describe the Flutter app you want to build…"/><div className="composer-bottom"><span>AI can generate real Flutter source files</span><button disabled={aiBusy} onClick={createProject}>{aiBusy?'Generating…':'↑'}</button></div></div>
+    <div className="composer"><textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')createProject()}} placeholder="Describe the Flutter app you want to build…"/><div className="composer-bottom"><span>{requirements.length?'Answer the questions above. I’ll update the design before building.':'AI will ask questions, create a preview, then let you build the APK.'}</span><button disabled={aiBusy} onClick={createProject}>{aiBusy?'Generating…':'↑'}</button></div></div>
     <div className="suggestions">{['Build a WhatsApp-style messenger','Create an AI chatbot','Build an e-commerce app','Make a food delivery app'].map(x=><button key={x} onClick={()=>setPrompt(x+' with a polished modern mobile UI.')}>{x} <span>→</span></button>)}</div>
    </section>}
    {tab==='projects'&&<section><h2>Your projects</h2><p className="muted">Open a project to continue coding with the AI assistant.</p>{projects.map(p=><Card p={p} open={()=>{setActive(p.id);setTab('builder')}} key={p.id}/>)}{!projects.length&&<div className="empty">No projects yet. Start a new chat.</div>}</section>}
    {tab==='builder'&&<section className="builder">{!project?<div className="empty">Select a project first.</div>:<>
-    <div className="bar"><span className="badge">{project.status}</span><button onClick={()=>build('apk')}>Build APK</button><button onClick={()=>build('aab')}>Build AAB</button></div>
+    <div className="bar"><span className="badge">{project.status}</span><span className="preview-ready">● Preview ready</span><button onClick={()=>setTab('builder')}>Preview</button><button onClick={()=>build('apk')}>Build APK</button><button onClick={()=>build('aab')}>Build AAB</button></div>
     <div className="workspace">
      <div className="ide">
       <div className="files"><b>FILES</b>{Object.keys(files).map(f=><button className={file===f?'selected':''} onClick={()=>setFile(f)} key={f}>{f}</button>)}</div>
