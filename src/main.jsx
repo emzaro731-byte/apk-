@@ -62,7 +62,7 @@ function App(){
   setProjects(x=>x.map(v=>v.id===p.id?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
   setPrompt('');
  }
- function build(format){if(!project)return;setBuilds([{id:crypto.randomUUID(),projectId:project.id,format,status:'queued',message:'External Flutter build runner is not configured.',createdAt:new Date().toISOString()},...builds]);setTab('builds');}
+ function build(format){if(!project)return;const job={id:crypto.randomUUID(),projectId:project.id,projectName:project.name,format,status:'queued',message:'Build queued. Connect the Flutter build runner to produce the APK/AAB artifact.',createdAt:new Date().toISOString()};setBuilds(x=>[job,...x]);setTab('builds');}
  async function send(){const q=prompt.trim();if(!q||aiBusy)return;setChat(c=>[...c,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}]);setPrompt('');await generate(q);}
  return <div className="app chatgpt-shell">
   <aside className="sidebar">
@@ -92,9 +92,11 @@ function App(){
      <div className="assistant"><b>AI ASSISTANT</b><div className="chat">{chat.map((m,i)=><div className="msg" key={i}><strong>{m.r}</strong><p>{m.t}</p></div>)}</div><div className="chatbox"><input value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask AI to change the app..."/><button onClick={send}>↑</button></div></div>
     </div>
    </>}</section>}
-   {tab==='builds'&&<section><h2>Build jobs</h2><p className="muted">Only an external Flutter runner can produce real APK/AAB artifacts.</p>{builds.map(b=><div className="build" key={b.id}><strong>{b.format.toUpperCase()}</strong><span className="badge yellow">{b.status}</span><p>{b.message}</p><small>{new Date(b.createdAt).toLocaleString()}</small></div>)}{!builds.length&&<div className="empty">No build jobs yet.</div>}</section>}
+   {tab==='builds'&&<BuildHistory builds={builds} projects={projects}/>}
   </main>
  </div>
 }
+function BuildHistory({builds,projects}){const total=builds.length;const success=builds.filter(b=>b.status==='success').length;const failed=builds.filter(b=>b.status==='failed').length;return <section className="build-history"><div className="history-head"><div><h2>Build history</h2><p className="muted">Track every APK and AAB build from your projects.</p></div><div className="history-count">{total} build{total===1?'':'s'}</div></div><div className="build-stats"><div><b>{total}</b><span>Total builds</span></div><div><b>{success}</b><span>Successful</span></div><div><b>{failed}</b><span>Failed</span></div></div>{builds.length?<div className="build-list">{builds.map((b,i)=><div className="build-row" key={b.id}><div className="build-type">{b.format==='apk'?'APK':'AAB'}</div><div className="build-info"><strong>{b.projectName||projects.find(p=>p.id===b.projectId)?.name||'Flutter project'}</strong><span>{new Date(b.createdAt).toLocaleString()}</span></div><span className={"badge "+(b.status==='success'?'success':b.status==='failed'?'failed':'yellow')}>{b.status}</span><button className="build-more" title="Build details">⋯</button></div>)}</div>:<div className="empty"><div className="empty-icon">◈</div><h3>No builds yet</h3><p>Create a project and choose Build APK or Build AAB to start your build history.</p></div>}</section>}
+
 function Card({p,open}){return <div className="card"><div className="icon">⌁</div><div><h3>{p.name}</h3><p>{p.description}</p><small className="badge">{p.status}</small></div><button onClick={open}>Open →</button></div>}
 createRoot(document.getElementById('root')).render(<App/>);
