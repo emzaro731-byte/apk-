@@ -37,11 +37,24 @@ app.get("/health", (req, res) =>
 );
 
 app.post("/api/generate", async (req, res) => {
+  const requestId = Math.random().toString(36).slice(2, 10);
+  console.log(`[generate:${requestId}] request received`);
+
   if (!GROQ_API_KEY) {
-    return res.status(503).json({ error: "GROQ_API_KEY is not configured on the server." });
+    console.error(`[generate:${requestId}] GROQ_API_KEY is missing`);
+    return res.status(503).json({
+      error: "AI backend configuration error: GROQ_API_KEY is not configured on the Render server.",
+      code: "MISSING_GROQ_API_KEY",
+      requestId
+    });
   }
+
   const prompt = String(req.body?.prompt || "").trim();
-  if (!prompt) return res.status(400).json({ error: "prompt is required" });
+  if (!prompt) {
+    console.error(`[generate:${requestId}] prompt is missing`);
+    return res.status(400).json({ error: "Prompt is empty. Describe the app you want to build.", code: "EMPTY_PROMPT", requestId });
+  }
+
   const existing = Array.isArray(req.body?.files) ? req.body.files.slice(0, 30) : [];
   const conversation = Array.isArray(req.body?.conversation) ? req.body.conversation.slice(-20) : [];
   const user = `Help the user design and build this Flutter application:
@@ -54,7 +67,9 @@ Existing project files:
 ${JSON.stringify(existing)}
 
 If important product requirements are missing, ask concise questions instead of generating code. If enough information is available, generate the complete files needed for the result.`;
+
   try {
+    console.log(`[generate:${requestId}] calling Groq model=${MODEL}`);
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
@@ -65,20 +80,59 @@ If important product requirements are missing, ask concise questions instead of 
         response_format: { type: "json_object" }
       })
     });
-    const data = await r.json();
-    if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Groq request failed" });
+
+    const rawBody = await r.text();
+    let data = {};
+    try { data = rawBody ? JSON.parse(rawBody) : {}; } catch {
+      console.error(`[generate:${requestId}] Groq returned non-JSON HTTP ${r.status}: ${rawBody.slice(0, 500)}`);
+      return res.status(502).json({
+        error: `Groq returned an invalid response (HTTP ${r.status}). Check the Render logs for request ${requestId}.`,
+        code: "GROQ_INVALID_RESPONSE",
+        requestId
+      });
+    }
+
+    if (!r.ok) {
+      const providerMessage = data?.error?.message || `Groq returned HTTP ${r.status}`;
+      console.error(`[generate:${requestId}] Groq error HTTP ${r.status}: ${providerMessage}`);
+      return res.status(r.status).json({
+        error: `AI provider error: ${providerMessage}`,
+        code: "GROQ_API_ERROR",
+        providerStatus: r.status,
+        requestId
+      });
+    }
+
     const raw = data?.choices?.[0]?.message?.content || "{}";
     let result;
-    try { result = JSON.parse(raw); } catch { return res.status(502).json({ error: "Groq returned invalid JSON" }); }
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      console.error(`[generate:${requestId}] Groq returned invalid JSON content`);
+      return res.status(502).json({
+        error: "AI provider returned text that was not valid JSON. Try again; if it continues, check the Render logs.",
+        code: "GROQ_INVALID_JSON",
+        requestId
+      });
+    }
+
     if (!Array.isArray(result.files)) result.files = [];
+    console.log(`[generate:${requestId}] success mode=${result.mode === "questions" ? "questions" : "generated"} files=${result.files.length}`);
+
     res.json({
       mode: result.mode === "questions" ? "questions" : "generated",
       message: result.message || (result.mode === "questions" ? "I have a few questions before I build it." : "Project generated."),
       questions: Array.isArray(result.questions) ? result.questions.filter(q => typeof q === "string").slice(0, 5) : [],
-      files: result.files.filter(f => f && typeof f.path === "string" && typeof f.content === "string")
+      files: result.files.filter(f => f && typeof f.path === "string" && typeof f.content === "string"),
+      requestId
     });
   } catch (e) {
-    res.status(500).json({ error: e.message || "Generation failed" });
+    console.error(`[generate:${requestId}] server/network error:`, e);
+    return res.status(502).json({
+      error: `AI connection failed: ${e?.message || "Unable to reach Groq from the Render server."}`,
+      code: "AI_CONNECTION_ERROR",
+      requestId
+    });
   }
 });
 
