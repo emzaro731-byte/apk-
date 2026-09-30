@@ -1,23 +1,15 @@
 services:
   - type: web
-    name: ai-flutter-builder-api
-    runtime: docker
-    dockerfilePath: ./server/Dockerfile
+    name: ai-flutter-builder
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     plan: free
     envVars:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-20b
-
-  - type: web
-    name: ai-flutter-builder
-    runtime: static
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    envVars:
-      - key: VITE_AI_API_URL
-        value: https://ai-flutter-builder-api.onrender.com
 
   - type: web
     name: flutter-build-runner
