@@ -62,7 +62,39 @@ function App(){
   setProjects(x=>x.map(v=>v.id===p.id?{...v,status:'ready',updatedAt:new Date().toISOString()}:v));
   setPrompt('');
  }
- function build(format){if(!project)return;const job={id:crypto.randomUUID(),projectId:project.id,projectName:project.name,format,status:'queued',message:'Build queued. Connect the Flutter build runner to produce the APK/AAB artifact.',createdAt:new Date().toISOString()};setBuilds(x=>[job,...x]);setTab('builds');}
+ async function build(format){
+  if(!project||aiBusy)return;
+  const localId=crypto.randomUUID();
+  const job={id:localId,projectId:project.id,projectName:project.name,format,status:'queued',message:'Build queued.',createdAt:new Date().toISOString()};
+  setBuilds(x=>[job,...x]);setTab('builds');
+  try{
+   const r=await fetch(apiUrl+'/api/build',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,projectName:project.name,files:Object.entries(files).map(([path,content])=>({path,content}))})});
+   const data=await r.json();
+   if(!r.ok)throw new Error(data.error||'Build request failed');
+   setBuilds(x=>x.map(b=>b.id===localId?{...b,remoteId:data.id,status:data.status||'queued',message:'Build submitted to Flutter runner.'}:b));
+   if(data.id)pollBuild(localId,data.id);
+  }catch(e){
+   setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:e.message}:b));
+  }
+ }
+ async function pollBuild(localId,remoteId){
+  const max=120;
+  for(let i=0;i<max;i++){
+   await new Promise(r=>setTimeout(r,3000));
+   try{
+    const r=await fetch(apiUrl+'/api/build/'+encodeURIComponent(remoteId));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Status request failed');
+    const status=data.status==='successful'?'success':data.status;
+    setBuilds(x=>x.map(b=>b.id===localId?{...b,status,message:data.error||b.message,artifactReady:Boolean(data.artifactReady)}:b));
+    if(status==='success'||status==='failed')return;
+   }catch(e){
+    setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:e.message}:b));
+    return;
+   }
+  }
+  setBuilds(x=>x.map(b=>b.id===localId?{...b,status:'failed',message:'Build status polling timed out.'}:b));
+ }
  async function send(){const q=prompt.trim();if(!q||aiBusy)return;setChat(c=>[...c,{r:'You',t:q},{r:'AI',t:'Thinking with Groq…'}]);setPrompt('');await generate(q);}
  return <div className="app chatgpt-shell">
   <aside className="sidebar">
