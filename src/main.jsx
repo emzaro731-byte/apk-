@@ -42,13 +42,29 @@ function App(){
 
  const project=projects.find(p=>p.id===active);
 
- async function generate(d,historyOverride){
+ function explainError(e,status,requestId){
+  const m=String(e?.message||e||'Unknown error');
+  if(m==='Failed to fetch'||m.includes('NetworkError')||m.includes('Load failed')) return 'AI CONNECTION FAILED\\n\\nThe browser could not reach the AI backend at '+apiUrl+'.\\n\\nOpen '+apiUrl+'/health'. If it does not load, the Render service is unavailable. If it loads, confirm GROQ_API_KEY is set in Render Environment and redeploy. Then try again.';
+  if(status===401||m.toLowerCase().includes('invalid api key')||m.toLowerCase().includes('authentication')) return 'GROQ AUTHENTICATION ERROR\\n\\nGroq rejected the API key. Check GROQ_API_KEY in Render Environment.';
+  if(status===429||m.toLowerCase().includes('rate limit')) return 'GROQ RATE LIMIT\\n\\nThe AI provider temporarily rate-limited this request. Wait and try again.';
+  if(status===404||m.toLowerCase().includes('model')) return 'GROQ MODEL ERROR\\n\\nThe configured model may be unavailable. Check GROQ_MODEL in Render Environment.';
+  return m+(requestId?'\\n\\nRequest ID: '+requestId:'');
+}
+
+async function generate(d,historyOverride){
   setAiBusy(true);
   try{
    const history=historyOverride||chat;
-   const r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,conversation:history.map(m=>({role:m.r==='You'?'user':'assistant',content:m.t})),files:Object.entries(files).map(([path,content])=>({path,content}))})});
-   const data=await r.json();
-   if(!r.ok)throw new Error(data.error||'Groq request failed');
+   let r;
+   try{
+    r=await fetch(apiUrl+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:d,conversation:history.map(m=>({role:m.r==='You'?'user':'assistant',content:m.t})),files:Object.entries(files).map(([path,content])=>({path,content}))})});
+   }catch(e){ throw Object.assign(new Error(explainError(e)),{network:true}); }
+   let data={};
+   try{
+    const ct=r.headers.get('content-type')||'';
+    data=ct.includes('application/json')?await r.json():{error:await r.text()};
+   }catch(e){ throw new Error('AI BACKEND RESPONSE ERROR\\n\\nThe server returned HTTP '+r.status+' but the response could not be read. Check Render logs.'); }
+   if(!r.ok) throw Object.assign(new Error(data.error||'AI request failed'),{status:r.status,requestId:data.requestId});
    if(data.mode==='questions'){
     const qs=Array.isArray(data.questions)?data.questions:[];
     setRequirements(qs);
@@ -61,8 +77,10 @@ function App(){
     setTab('builder');
    }
    return data;
-  }catch(e){setChat(c=>[...c,{r:'AI',t:e.message}]);return null;}
-  finally{setAiBusy(false);}
+  }catch(e){
+   setChat(c=>[...c,{r:'AI',t:explainError(e,e.status,e.requestId)}]);
+   return null;
+  }finally{setAiBusy(false);}
  }
 
  async function createProject(){
