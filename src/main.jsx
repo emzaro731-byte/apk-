@@ -44,7 +44,7 @@ function App(){
 
  function explainError(e,status,requestId){
   const m=String(e?.message||e||'Unknown error');
-  if(m==='Failed to fetch'||m.includes('NetworkError')||m.includes('Load failed')) return 'AI CONNECTION FAILED\\n\\nThe browser could not reach the AI backend at '+apiUrl+'.\\n\\nOpen '+apiUrl+'/health'. If it does not load, the Render service is unavailable. If it loads, confirm GROQ_API_KEY is set in Render Environment and redeploy. Then try again.';
+  if(m==='Failed to fetch'||m.includes('NetworkError')||m.includes('Load failed')) return \`AI CONNECTION FAILED\\n\\nThe browser could not reach the AI backend at \${apiUrl}.\\n\\nOpen \${apiUrl}/health. If it does not load, the Render service is unavailable. If it loads, confirm GROQ_API_KEY is set in Render Environment and redeploy. Then try again.\`;
   if(status===401||m.toLowerCase().includes('invalid api key')||m.toLowerCase().includes('authentication')) return 'GROQ AUTHENTICATION ERROR\\n\\nGroq rejected the API key. Check GROQ_API_KEY in Render Environment.';
   if(status===429||m.toLowerCase().includes('rate limit')) return 'GROQ RATE LIMIT\\n\\nThe AI provider temporarily rate-limited this request. Wait and try again.';
   if(status===404||m.toLowerCase().includes('model')) return 'GROQ MODEL ERROR\\n\\nThe configured model may be unavailable. Check GROQ_MODEL in Render Environment.';
