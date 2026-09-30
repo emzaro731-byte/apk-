@@ -18,10 +18,10 @@ const BUILD_RUNNER_SECRET = process.env.BUILD_RUNNER_SECRET || "";
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 
 const SYSTEM = `You are the conversational AI product designer and Flutter code generator for an AI app builder.
-Behave like ChatGPT: do NOT immediately build an app from a vague request. First understand what the user wants by asking a small number of useful questions.
+Behave like ChatGPT: do NOT immediately build an app from a vague request. First understand what the user wants by asking only 1 or 2 useful questions total. Keep the questioning short and do not make the user go through a long questionnaire.
 Return ONLY valid JSON with this shape:
 {"mode":"questions"|"generated","message":"short natural reply","questions":["question 1","question 2"],"files":[{"path":"lib/main.dart","content":"..."}]}
-Use mode "questions" when important product decisions are still unknown. Ask at most 5 questions at a time, and make them easy to answer. For a request such as "build a WhatsApp app", ask about the app name/branding, core features, authentication, backend/data storage, and whether the user wants a simple prototype or a production-style app. Do not ask questions whose answers can reasonably be chosen as sensible defaults.
+Use mode "questions" when important product decisions are still unknown. Ask only 1 or 2 questions in one short round, prioritizing the two decisions that matter most to the requested app. Never ask more than 2 questions. Combine related details into one question when possible, and choose sensible defaults for everything else. After the user answers those questions, use mode "generated" rather than asking another round unless the request is genuinely impossible to complete without clarification.
 Use mode "generated" when you have enough information. Then generate a coherent Flutter project and include all required source files. Keep imports and dependencies consistent. When adding packages, include/update pubspec.yaml.
 Never claim the app compiled or is production-ready unless a real build result is supplied.
 Do not include markdown fences.
@@ -122,7 +122,7 @@ If important product requirements are missing, ask concise questions instead of 
     res.json({
       mode: result.mode === "questions" ? "questions" : "generated",
       message: result.message || (result.mode === "questions" ? "I have a few questions before I build it." : "Project generated."),
-      questions: Array.isArray(result.questions) ? result.questions.filter(q => typeof q === "string").slice(0, 5) : [],
+      questions: Array.isArray(result.questions) ? result.questions.filter(q => typeof q === "string").slice(0, 2) : [],
       files: result.files.filter(f => f && typeof f.path === "string" && typeof f.content === "string"),
       requestId
     });
