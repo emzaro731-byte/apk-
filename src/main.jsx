@@ -15,7 +15,7 @@ function App(){
  const [builds,setBuilds]=useState(()=>JSON.parse(localStorage.getItem('builds')||'[]'));
  const [tab,setTab]=useState('dashboard'),[prompt,setPrompt]=useState(''),[file,setFile]=useState('lib/main.dart');
  const [chat,setChat]=useState([{r:'AI',t:'Describe the Flutter app you want to build. Groq will generate real project files through the secure backend.'}]);
- const [aiBusy,setAiBusy]=useState(false); const rawApiUrl=import.meta.env.VITE_AI_API_URL||''; const apiUrl=rawApiUrl ? (rawApiUrl.startsWith('http')?rawApiUrl:'https://'+rawApiUrl).replace(/\/$/,'') : '';
+ const [aiBusy,setAiBusy]=useState(false); const rawApiUrl=import.meta.env.VITE_AI_API_URL||''; const apiUrl=(rawApiUrl ? (rawApiUrl.startsWith('http')?rawApiUrl:'https://'+rawApiUrl).replace(/\/$/,'') : window.location.origin);
  useEffect(()=>localStorage.setItem('projects',JSON.stringify(projects)),[projects]);
  useEffect(()=>localStorage.setItem('active',active),[active]); useEffect(()=>localStorage.setItem('files',JSON.stringify(files)),[files]); useEffect(()=>localStorage.setItem('builds',JSON.stringify(builds)),[builds]);
  const project=projects.find(x=>x.id===active);
