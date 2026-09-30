@@ -17,12 +17,14 @@ const BUILD_RUNNER_URL = (process.env.BUILD_RUNNER_URL || "").replace(/\/$/, "")
 const BUILD_RUNNER_SECRET = process.env.BUILD_RUNNER_SECRET || "";
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 
-const SYSTEM = `You are the AI engine for a Flutter app builder.
+const SYSTEM = `You are the conversational AI product designer and Flutter code generator for an AI app builder.
+Behave like ChatGPT: do NOT immediately build an app from a vague request. First understand what the user wants by asking a small number of useful questions.
 Return ONLY valid JSON with this shape:
-{"message":"short explanation","files":[{"path":"lib/main.dart","content":"..."}]}
-Generate coherent Flutter source files. Keep imports and dependencies consistent.
-When adding packages, include/update pubspec.yaml. Never claim the app compiled.
-Do not include markdown fences. Prefer a small complete starter project unless the user asks for more.
+{"mode":"questions"|"generated","message":"short natural reply","questions":["question 1","question 2"],"files":[{"path":"lib/main.dart","content":"..."}]}
+Use mode "questions" when important product decisions are still unknown. Ask at most 5 questions at a time, and make them easy to answer. For a request such as "build a WhatsApp app", ask about the app name/branding, core features, authentication, backend/data storage, and whether the user wants a simple prototype or a production-style app. Do not ask questions whose answers can reasonably be chosen as sensible defaults.
+Use mode "generated" when you have enough information. Then generate a coherent Flutter project and include all required source files. Keep imports and dependencies consistent. When adding packages, include/update pubspec.yaml.
+Never claim the app compiled or is production-ready unless a real build result is supplied.
+Do not include markdown fences.
 `;
 
 app.get("/health", (req, res) =>
@@ -41,12 +43,17 @@ app.post("/api/generate", async (req, res) => {
   const prompt = String(req.body?.prompt || "").trim();
   if (!prompt) return res.status(400).json({ error: "prompt is required" });
   const existing = Array.isArray(req.body?.files) ? req.body.files.slice(0, 30) : [];
-  const user = `Build or modify this Flutter application:
+  const conversation = Array.isArray(req.body?.conversation) ? req.body.conversation.slice(-20) : [];
+  const user = `Help the user design and build this Flutter application:
 ${prompt}
+
+Conversation so far:
+${JSON.stringify(conversation)}
 
 Existing project files:
 ${JSON.stringify(existing)}
-Return the complete files needed for the requested result.`;
+
+If important product requirements are missing, ask concise questions instead of generating code. If enough information is available, generate the complete files needed for the result.`;
   try {
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -65,7 +72,9 @@ Return the complete files needed for the requested result.`;
     try { result = JSON.parse(raw); } catch { return res.status(502).json({ error: "Groq returned invalid JSON" }); }
     if (!Array.isArray(result.files)) result.files = [];
     res.json({
-      message: result.message || "Project generated.",
+      mode: result.mode === "questions" ? "questions" : "generated",
+      message: result.message || (result.mode === "questions" ? "I have a few questions before I build it." : "Project generated."),
+      questions: Array.isArray(result.questions) ? result.questions.filter(q => typeof q === "string").slice(0, 5) : [],
       files: result.files.filter(f => f && typeof f.path === "string" && typeof f.content === "string")
     });
   } catch (e) {
