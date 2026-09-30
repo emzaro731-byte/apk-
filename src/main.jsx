@@ -65,9 +65,9 @@ async function generate(d,historyOverride){
    }catch(e){ throw new Error('AI BACKEND RESPONSE ERROR\\n\\nThe server returned HTTP '+r.status+' but the response could not be read. Check Render logs.'); }
    if(!r.ok) throw Object.assign(new Error(data.error||'AI request failed'),{status:r.status,requestId:data.requestId});
    if(data.mode==='questions'){
-    const qs=Array.isArray(data.questions)?data.questions:[];
+    const qs=Array.isArray(data.questions)?data.questions.slice(0,2):[];
     setRequirements(qs);
-    setChat(c=>[...c,{r:'AI',t:data.message||'Before I build it, I need a few details.'},...qs.map(q=>({r:'AI',t:'Question: '+q}))]);
+    setChat(c=>[...c,{r:'AI',t:data.message||'I only need one or two details before I build it.'},...qs.map((q,i)=>({r:'AI',t:`Question ${i+1}: ${q}`}))]);
    }else{
     const next={...files};(data.files||[]).forEach(x=>{next[x.path]=x.content});
     setFiles(next);setRequirements([]);
