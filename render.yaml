@@ -17,10 +17,7 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_AI_API_URL
-        fromService:
-          type: web
-          name: ai-flutter-builder-api
-          property: host
+        value: https://ai-flutter-builder-api.onrender.com
 
   - type: web
     name: flutter-build-runner
