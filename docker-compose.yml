@@ -1,0 +1,8 @@
+services:
+  ai-api:
+    build: ./server
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+    ports:
+      - "8080:8080"
